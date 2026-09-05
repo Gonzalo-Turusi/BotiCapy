@@ -67,13 +67,6 @@ class BotiCapyClient(commands.Bot):
                     try:
                         await self.load_extension(extension_path)
                         logger.info(f"Loaded extension: {extension_path}")
-                        
-                        # Register commands from this cog
-                        cog = self.get_cog(feature_dir.name.title())
-                        if cog:
-                            for command in cog.get_app_commands():
-                                await registry.register(command.name, "command")
-                                logger.info(f"Registered command: {command.name}")
                     except Exception as e:
                         logger.error(f"Failed to load extension {extension_path}: {e}")
 
@@ -92,3 +85,10 @@ class BotiCapyClient(commands.Bot):
                         logger.info(f"Registered module: {module_dir.name}")
                     except Exception as e:
                         logger.error(f"Failed to load extension {extension_path}: {e}")
+
+        # Register all slash commands from the fully-synced command tree
+        command_count = 0
+        for command in self.tree.walk_commands():
+            await registry.register(command.name, "command")
+            command_count += 1
+        logger.info(f"Registered {command_count} commands from command tree")
