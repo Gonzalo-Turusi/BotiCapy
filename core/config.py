@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     groq_api_key: str
     gemini_api_key: str
     log_level: str = "INFO"
+    admin_api_key: str | None = None
+    admin_api_port: int = 8000
 
 
 settings = Settings()

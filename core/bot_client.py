@@ -8,6 +8,8 @@ from core.errors import setup_error_handler
 from shared.ai.groq_provider import GroqProvider
 from shared.ai.gemini_provider import GeminiProvider
 from shared.ai.ai_service import AIService
+from shared.database.db import init_db
+from shared.registry import registry
 
 
 class BotiCapyClient(commands.Bot):
@@ -18,6 +20,9 @@ class BotiCapyClient(commands.Bot):
 
     async def setup_hook(self):
         logger.info("Setting up bot...")
+
+        # Initialize database
+        await init_db()
 
         # Instantiate AI service with Groq as primary, Gemini as fallback
         primary = GroqProvider()
@@ -31,10 +36,26 @@ class BotiCapyClient(commands.Bot):
         # Setup global error handler
         setup_error_handler(self)
 
+        # Setup global command check for enable/disable
+        self.tree.interaction_check = self._global_interaction_check
+
         logger.info("Bot setup complete")
 
+    async def _global_interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Global check to enforce enable/disable for all slash commands."""
+        command_name = interaction.command.name if interaction.command else None
+        if command_name:
+            is_enabled = await registry.is_enabled(command_name)
+            if not is_enabled:
+                await interaction.response.send_message(
+                    "This command is currently disabled.",
+                    ephemeral=True
+                )
+                return False
+        return True
+
     async def _load_extensions(self):
-        """Dynamically load all Cogs from features/ and modules/ directories."""
+        """Dynamically load all Cogs from features/ and modules/ directories and register their commands."""
         base_path = Path(__file__).parent.parent
 
         # Load from features/
@@ -46,6 +67,13 @@ class BotiCapyClient(commands.Bot):
                     try:
                         await self.load_extension(extension_path)
                         logger.info(f"Loaded extension: {extension_path}")
+                        
+                        # Register commands from this cog
+                        cog = self.get_cog(feature_dir.name.title())
+                        if cog:
+                            for command in cog.get_app_commands():
+                                await registry.register(command.name, "command")
+                                logger.info(f"Registered command: {command.name}")
                     except Exception as e:
                         logger.error(f"Failed to load extension {extension_path}: {e}")
 
@@ -58,5 +86,9 @@ class BotiCapyClient(commands.Bot):
                     try:
                         await self.load_extension(extension_path)
                         logger.info(f"Loaded extension: {extension_path}")
+                        
+                        # Register the module itself
+                        await registry.register(module_dir.name, "module")
+                        logger.info(f"Registered module: {module_dir.name}")
                     except Exception as e:
                         logger.error(f"Failed to load extension {extension_path}: {e}")
